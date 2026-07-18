@@ -924,17 +924,18 @@ hairTufts.forEach(([x, y, z, rz, rx, length], index) => {
 });
 
 const capeShape = new THREE.Shape();
-capeShape.moveTo(-0.5, 0.48);
-capeShape.lineTo(0.5, 0.48);
-capeShape.lineTo(0.92, -1.48);
-capeShape.lineTo(0.28, -1.25);
-capeShape.lineTo(0, -1.5);
-capeShape.lineTo(-0.32, -1.22);
-capeShape.lineTo(-0.92, -1.48);
+capeShape.moveTo(-0.5, 0);
+capeShape.lineTo(0.5, 0);
+capeShape.lineTo(0.92, 1.48);
+capeShape.lineTo(0.28, 1.25);
+capeShape.lineTo(0, 1.5);
+capeShape.lineTo(-0.32, 1.22);
+capeShape.lineTo(-0.92, 1.48);
 capeShape.closePath();
 const cape = new THREE.Mesh(new THREE.ShapeGeometry(capeShape), capeMaterial);
-cape.position.set(0, 0.88, 0.39);
-cape.rotation.set(-1.16, 0, Math.PI);
+const CAPE_REST_X = Math.PI / 2 + 0.28;
+cape.position.set(0, 0.72, 0.42);
+cape.rotation.set(CAPE_REST_X, 0, 0);
 cape.castShadow = true;
 driver.add(cape);
 
@@ -1304,8 +1305,8 @@ function updatePlayer(delta) {
   car.rotation.z = lerp(car.rotation.z, -steer * 0.055, 1 - Math.exp(-delta * 7));
   car.position.y = 0.12 + Math.sin(state.elapsed * state.speed * 0.24) * 0.017;
 
-  cape.rotation.x = -1.12 + Math.sin(state.elapsed * 6.4) * 0.07 + state.speed * 0.0027;
-  cape.rotation.z = Math.PI + Math.sin(state.elapsed * 3.2) * 0.035 - steer * 0.06;
+  cape.rotation.x = CAPE_REST_X + Math.sin(state.elapsed * 6.4) * 0.055 - state.speed * 0.0024;
+  cape.rotation.z = Math.sin(state.elapsed * 3.2) * 0.035 - steer * 0.06;
   driver.rotation.z = lerp(driver.rotation.z, -steer * 0.055, 1 - Math.exp(-delta * 5));
 
   state.distance = Math.max(0, -car.position.z);
@@ -1533,7 +1534,7 @@ function frame() {
     audio.update(delta, state.progress, state.speed);
   } else if (!state.started) {
     car.position.y = 0.12 + Math.sin(state.elapsed * 1.6) * 0.014;
-    cape.rotation.x = -1.12 + Math.sin(state.elapsed * 2.2) * 0.04;
+    cape.rotation.x = CAPE_REST_X + Math.sin(state.elapsed * 2.2) * 0.035;
     seeds.forEach((seed, i) => {
       seed.mesh.rotation.y += delta * 0.45;
       seed.mesh.position.y = seed.baseY + Math.sin(state.elapsed * 1.8 + i) * 0.14;
