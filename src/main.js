@@ -91,6 +91,7 @@ const state = {
   gateZ: 0,
   gateReveal: 0,
   cameraTransition: 0,
+  inkStage: -1,
   elapsed: 0,
   shake: 0,
   seedNoticeTimer: 0,
@@ -230,11 +231,27 @@ const revealFragmentShader = /* glsl */`
     float broadNoise = fbm(p * 0.055);
     float fibers = noise(p * vec2(0.55, 0.16));
     vec3 living = mix(uColorA, uColorB, broadNoise * 0.76 + fibers * 0.10);
+
+    // Before color arrives, layer broad ink blooms, pooled pigment and dry
+    // brush grain over the paper instead of showing a flat white surface.
+    float washCloud = fbm(p * 0.032 + vec2(7.4, 3.1));
+    float washPool = smoothstep(0.42, 0.74, washCloud);
+    float inkRim = 1.0 - smoothstep(0.035, 0.20, abs(noise(p * 0.085 + 4.2) - 0.52));
+    float dryBrush = smoothstep(0.48, 0.78, noise(p * vec2(0.34, 0.82) + 11.7));
+    float paperFiber = noise(p * vec2(1.6, 0.22));
+    float inkDepth = washPool * 0.17 + inkRim * 0.075 + dryBrush * 0.045 + paperFiber * 0.025;
+    if (uRoad > 0.5) {
+      float roadStroke = smoothstep(0.32, 0.78, noise(p * vec2(0.72, 0.055)));
+      inkDepth += roadStroke * 0.075;
+    }
+    vec3 inkPaper = uMono * (1.015 - inkDepth);
+    inkPaper = mix(inkPaper, vec3(0.10), inkRim * washPool * 0.07);
+
     if (uRoad > 0.5) {
       float wear = smoothstep(0.32, 0.72, noise(p * vec2(0.16, 0.7)));
       living *= 0.94 + wear * 0.07;
     }
-    vec3 color = mix(uMono, living, reveal);
+    vec3 color = mix(inkPaper, living, reveal);
     color += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.012;
     float fogFactor = smoothstep(uFogNear, uFogFar, vViewDepth);
     color = mix(color, uFogColor, fogFactor);
@@ -291,9 +308,47 @@ const seeds = [];
 const particles = [];
 const ripples = [];
 
+function createSketchEdgeGeometry(geometry, threshold) {
+  const edgeGeometry = new THREE.EdgesGeometry(geometry, threshold);
+  geometry.computeBoundingSphere();
+  const radius = geometry.boundingSphere?.radius ?? 1;
+  const jitter = clamp(radius * 0.0045, 0.004, 0.038);
+  const positions = edgeGeometry.attributes.position;
+  const colors = [];
+  const darkInk = new THREE.Color('#171614');
+  const paleInk = new THREE.Color('#625c52');
+
+  for (let i = 0; i < positions.count; i += 1) {
+    const x = positions.getX(i);
+    const y = positions.getY(i);
+    const z = positions.getZ(i);
+    const seed = Math.sin(i * 91.17 + x * 17.31 + y * 47.7 + z * 29.13) * 43758.5453;
+    const random = seed - Math.floor(seed);
+    const seedB = Math.sin((i + 13) * 57.3 + x * 31.1 - z * 19.7) * 15731.743;
+    const randomB = seedB - Math.floor(seedB);
+    positions.setXYZ(
+      i,
+      x + (random - 0.5) * jitter,
+      y + (randomB - 0.5) * jitter,
+      z + (random * 0.62 - randomB * 0.38) * jitter,
+    );
+    const inkColor = darkInk.clone().lerp(paleInk, 0.12 + random * 0.52);
+    colors.push(inkColor.r, inkColor.g, inkColor.b);
+  }
+
+  positions.needsUpdate = true;
+  edgeGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  return edgeGeometry;
+}
+
 function outlinedMesh(geometry, targetColor, options = {}) {
+  const target = new THREE.Color(targetColor);
+  const targetHsl = {};
+  target.getHSL(targetHsl);
+  const inkLightness = lerp(0.69, 0.94, clamp(targetHsl.l, 0, 1));
+  const mono = new THREE.Color().setHSL(0, 0, inkLightness);
   const material = new THREE.MeshStandardMaterial({
-    color: PALETTE.paper,
+    color: mono,
     roughness: options.roughness ?? 0.86,
     metalness: options.metalness ?? 0,
     flatShading: true,
@@ -307,16 +362,18 @@ function outlinedMesh(geometry, targetColor, options = {}) {
   mesh.receiveShadow = options.receiveShadow ?? true;
 
   const edgeMaterial = new THREE.LineBasicMaterial({
-    color: '#151515',
+    color: '#ffffff',
+    vertexColors: true,
     transparent: true,
-    opacity: options.edgeOpacity ?? 0.82,
+    opacity: options.edgeOpacity ?? 0.74,
     depthWrite: false,
   });
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, options.edgeThreshold ?? 18), edgeMaterial);
+  edgeMaterial.userData.inkOpacity = options.edgeOpacity ?? 0.74;
+  const edges = new THREE.LineSegments(createSketchEdgeGeometry(geometry, options.edgeThreshold ?? 18), edgeMaterial);
   mesh.add(edges);
   return {
     mesh,
-    part: { material, target: new THREE.Color(targetColor), mono: PALETTE.paper.clone() },
+    part: { material, target, mono },
     edge: edgeMaterial,
   };
 }
@@ -1273,7 +1330,7 @@ function updateWorldMaterials(delta) {
     for (const part of item.parts) {
       part.material.color.copy(part.mono).lerp(part.target, item.reveal);
     }
-    for (const edge of item.edges) edge.opacity = lerp(0.78, 0.10, item.reveal);
+    for (const edge of item.edges) edge.opacity = lerp(edge.userData.inkOpacity ?? 0.74, 0.08, item.reveal);
     if (item.lineMaterial) {
       item.lineMaterial.color.copy(PALETTE.ink).lerp(item.lineTarget, item.reveal);
       item.lineMaterial.opacity = lerp(0.7, 0.52, item.reveal);
@@ -1479,6 +1536,11 @@ function updateAtmosphere() {
   bloom.strength = lerp(0.10, 0.30, atmosphericProgress);
   bloom.threshold = lerp(0.88, 0.76, atmosphericProgress);
   renderer.toneMappingExposure = lerp(1.10, 1.26, atmosphericProgress);
+  const inkStage = 1 - smoothstep(0.02, 0.72, state.progress);
+  if (Math.abs(inkStage - state.inkStage) > 0.004) {
+    state.inkStage = inkStage;
+    document.documentElement.style.setProperty('--ink-stage', inkStage.toFixed(3));
+  }
 }
 
 function updateInterface(delta) {
