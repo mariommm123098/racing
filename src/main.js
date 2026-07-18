@@ -39,23 +39,23 @@ const smoothstep = (a, b, x) => {
 };
 
 const PALETTE = {
-  paper: new THREE.Color('#f4f1eb'),
-  sky: new THREE.Color('#b7ced8'),
-  fogWarm: new THREE.Color('#ddd1be'),
-  grass: new THREE.Color('#98a58d'),
-  grassLight: new THREE.Color('#bac1a8'),
-  road: new THREE.Color('#b9afa3'),
-  roadMark: new THREE.Color('#ddd0bd'),
-  orange: new THREE.Color('#d98157'),
-  cream: new THREE.Color('#efe1cb'),
-  bark: new THREE.Color('#806d5d'),
-  pine: new THREE.Color('#718979'),
-  mountain: new THREE.Color('#9a94a0'),
-  cloud: new THREE.Color('#f3e9dd'),
-  rose: new THREE.Color('#c9958f'),
-  lavender: new THREE.Color('#9b91ad'),
-  blue: new THREE.Color('#829fb0'),
-  gold: new THREE.Color('#d5b56f'),
+  paper: new THREE.Color('#f7f3e9'),
+  sky: new THREE.Color('#80bad7'),
+  fogWarm: new THREE.Color('#ead6bd'),
+  grass: new THREE.Color('#72a66c'),
+  grassLight: new THREE.Color('#a6c982'),
+  road: new THREE.Color('#ad8f7f'),
+  roadMark: new THREE.Color('#f0d8aa'),
+  orange: new THREE.Color('#e37a43'),
+  cream: new THREE.Color('#fff0d5'),
+  bark: new THREE.Color('#79533e'),
+  pine: new THREE.Color('#4f8769'),
+  mountain: new THREE.Color('#8176a3'),
+  cloud: new THREE.Color('#fff8ea'),
+  rose: new THREE.Color('#dc7d87'),
+  lavender: new THREE.Color('#8f75ba'),
+  blue: new THREE.Color('#5595ba'),
+  gold: new THREE.Color('#e7b548'),
   ink: new THREE.Color('#161616'),
 };
 
@@ -114,9 +114,9 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = PALETTE.paper.clone();
-scene.fog = new THREE.Fog(PALETTE.paper.clone(), 28, 105);
+scene.fog = new THREE.Fog(PALETTE.paper.clone(), 70, 260);
 
-const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 520);
+const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 12000);
 camera.position.set(0, 4.6, 11);
 
 const composer = new EffectComposer(renderer);
@@ -266,7 +266,7 @@ function createRevealMaterial(mono, colorA, colorB, road = false) {
 
 const terrain = new THREE.Mesh(
   new THREE.PlaneGeometry(270, 3800, 1, 1),
-  createRevealMaterial('#f7f5f0', '#91a184', '#ddc39b'),
+  createRevealMaterial('#f8f5ee', '#70a96c', '#d7ba69'),
 );
 terrain.rotation.x = -Math.PI / 2;
 terrain.position.set(0, -0.07, -1760);
@@ -275,7 +275,7 @@ scene.add(terrain);
 
 const road = new THREE.Mesh(
   new THREE.PlaneGeometry(13.8, 3600, 1, 1),
-  createRevealMaterial('#d7d5d1', '#9f9286', '#cbb59e', true),
+  createRevealMaterial('#d9d6d0', '#a48172', '#d8aa78', true),
 );
 road.rotation.x = -Math.PI / 2;
 road.position.set(0, 0, -1700);
@@ -360,9 +360,40 @@ function createTree(x, z, scale = 1, tone = 0) {
   registerScenery(group, x, z, parts, edges, { sway: Math.random() * Math.PI * 2 });
 }
 
-function createMountain(x, z, radius, height, colorShift = 0) {
+function createDeciduousTree(x, z, scale = 1, tone = 0) {
   const group = new THREE.Group();
-  const target = PALETTE.mountain.clone().offsetHSL(colorShift, -0.04, 0.05 * colorShift);
+  const parts = [];
+  const edges = [];
+  const foliageColors = [PALETTE.grassLight, PALETTE.gold, PALETTE.rose, PALETTE.blue];
+  const foliageColor = foliageColors[tone % foliageColors.length];
+
+  const trunk = outlinedMesh(new THREE.CylinderGeometry(0.25, 0.42, 2.9, 6), PALETTE.bark);
+  trunk.mesh.position.y = 1.45;
+  group.add(trunk.mesh);
+  parts.push(trunk.part);
+  edges.push(trunk.edge);
+
+  [[-0.62, 3.45, 0.08, 1.18], [0.52, 3.6, 0, 1.28], [0, 4.48, 0.03, 1.48]].forEach(([px, py, pz, s], index) => {
+    const crown = outlinedMesh(
+      new THREE.IcosahedronGeometry(s, 1),
+      foliageColor.clone().offsetHSL(index * 0.01, -0.03, index * 0.025),
+      { edgeOpacity: 0.52, edgeThreshold: 12 },
+    );
+    crown.mesh.position.set(px, py, pz);
+    crown.mesh.scale.set(1, 0.88, 0.92);
+    group.add(crown.mesh);
+    parts.push(crown.part);
+    edges.push(crown.edge);
+  });
+
+  group.scale.setScalar(scale);
+  registerScenery(group, x, z, parts, edges, { sway: Math.random() * Math.PI * 2 });
+}
+
+function createMountain(x, z, radius, height, tone = 0) {
+  const group = new THREE.Group();
+  const mountainColors = [PALETTE.mountain, PALETTE.lavender, PALETTE.blue, PALETTE.rose, PALETTE.pine];
+  const target = mountainColors[tone % mountainColors.length].clone().offsetHSL(0, -0.06, 0.035);
   const mountain = outlinedMesh(new THREE.ConeGeometry(radius, height, 7), target, {
     castShadow: false,
     receiveShadow: true,
@@ -507,18 +538,69 @@ function createWaysideRuin(x, z, scale = 1, tone = 0) {
   registerScenery(group, x, z, parts, edges, { ruin: true });
 }
 
+function createPond(x, z, radius = 5, tone = 0) {
+  const group = new THREE.Group();
+  const waterColors = [PALETTE.blue, new THREE.Color('#67aaa2'), new THREE.Color('#7898c8')];
+  const water = outlinedMesh(new THREE.CylinderGeometry(radius, radius * 1.06, 0.07, 24), waterColors[tone % waterColors.length], {
+    roughness: 0.24,
+    metalness: 0.08,
+    transparent: true,
+    opacity: 0.82,
+    castShadow: false,
+    receiveShadow: true,
+    edgeOpacity: 0.38,
+  });
+  water.mesh.position.y = -0.015;
+  water.mesh.scale.z = 0.58;
+  group.add(water.mesh);
+  registerScenery(group, x, z, [water.part], [water.edge], { pond: true });
+}
+
+function createRoadLantern(x, z, tone = 0) {
+  const group = new THREE.Group();
+  const parts = [];
+  const edges = [];
+  const glowColors = [PALETTE.gold, PALETTE.rose, PALETTE.blue];
+  const glowColor = glowColors[tone % glowColors.length];
+
+  const stem = outlinedMesh(new THREE.CylinderGeometry(0.055, 0.09, 1.55, 6), PALETTE.bark, {
+    edgeOpacity: 0.48,
+    castShadow: false,
+  });
+  stem.mesh.position.y = 0.78;
+  group.add(stem.mesh);
+  parts.push(stem.part);
+  edges.push(stem.edge);
+
+  const lamp = outlinedMesh(new THREE.OctahedronGeometry(0.24, 0), glowColor, {
+    emissive: glowColor,
+    emissiveIntensity: 0.32,
+    roughness: 0.32,
+    edgeOpacity: 0.36,
+    castShadow: false,
+  });
+  lamp.mesh.position.y = 1.72;
+  group.add(lamp.mesh);
+  parts.push(lamp.part);
+  edges.push(lamp.edge);
+
+  registerScenery(group, x, z, parts, edges, { lantern: true });
+}
+
 // Distant ranges build the ink-drawn horizon.
 for (let i = 0; i < 32; i += 1) {
   const side = i % 2 === 0 ? -1 : 1;
   const z = -70 - i * 104;
-  createMountain(side * (36 + (i % 4) * 11), z, 18 + (i % 3) * 5, 24 + (i % 5) * 4, (i % 5) * 0.012);
+  createMountain(side * (36 + (i % 4) * 11), z, 18 + (i % 3) * 5, 24 + (i % 5) * 4, i % 5);
 }
 
 for (let i = 0; i < 118; i += 1) {
   const side = i % 2 === 0 ? -1 : 1;
   const z = -28 - i * 28.5;
   const x = side * (10.5 + ((i * 17) % 20));
-  createTree(x, z, 0.72 + ((i * 13) % 9) * 0.085, i % 4 === 0 ? 1 : 0);
+  const treeScale = 0.72 + ((i * 13) % 9) * 0.085;
+  if (i % 4 === 1 || i % 9 === 0) createDeciduousTree(x, z, treeScale, i % 4);
+  else createTree(x, z, treeScale, i % 4 === 0 ? 1 : 0);
 }
 
 for (let i = 0; i < 145; i += 1) {
@@ -546,6 +628,16 @@ for (let i = 0; i < 28; i += 1) {
 for (let i = 0; i < 8; i += 1) {
   const side = i % 2 === 0 ? -1 : 1;
   createWaysideRuin(side * (17 + (i % 3) * 4), -210 - i * 410, 0.78 + (i % 3) * 0.11, i);
+}
+
+for (let i = 0; i < 10; i += 1) {
+  const side = i % 2 === 0 ? -1 : 1;
+  createPond(side * (19 + (i % 3) * 5), -280 - i * 315, 4.6 + (i % 3) * 1.25, i);
+}
+
+for (let i = 0; i < 18; i += 1) {
+  const side = i % 2 === 0 ? -1 : 1;
+  createRoadLantern(side * 7.75, -135 - i * 172, i);
 }
 
 // Road markings are outlined paper strips at first, then warm ivory.
@@ -1172,9 +1264,9 @@ function updateWorldMaterials(delta) {
     }
   });
 
-  const clarityRadius = lerp(135, 390, smoothstep(0.02, 1, state.progress));
+  const clarityRadius = lerp(220, 1800, smoothstep(0.02, 1, state.progress));
   for (const item of scenery) {
-    if (Math.abs(item.z - car.position.z) > clarityRadius && !item.mountain && !item.cloud) continue;
+    if (state.progress < 0.999 && Math.abs(item.z - car.position.z) > clarityRadius && !item.mountain && !item.cloud) continue;
     const targetReveal = worldRevealAt(item.x, item.z);
     item.reveal = lerp(item.reveal, targetReveal, 1 - Math.exp(-delta * 1.7));
     for (const part of item.parts) {
@@ -1370,15 +1462,22 @@ function updateAtmosphere() {
   const atmosphericProgress = smoothstep(0.04, 0.92, state.progress);
   const skyColor = PALETTE.paper.clone().lerp(PALETTE.sky, atmosphericProgress);
   scene.background.copy(skyColor);
-  scene.fog.color.copy(skyColor).lerp(PALETTE.fogWarm, atmosphericProgress * 0.12);
-  scene.fog.near = lerp(28, 88, atmosphericProgress);
-  scene.fog.far = lerp(105, 360, atmosphericProgress);
-  hemiLight.intensity = lerp(2.25, 3.05, atmosphericProgress);
-  sunLight.intensity = lerp(1.15, 2.8, atmosphericProgress);
+  scene.fog.color.copy(skyColor).lerp(PALETTE.fogWarm, atmosphericProgress * 0.035);
+  if (state.progress >= 0.999) {
+    // Keep fog technically present for the reveal shader, but move it far
+    // beyond the complete route so the restored world reads as infinite.
+    scene.fog.near = 9000;
+    scene.fog.far = 11000;
+  } else {
+    scene.fog.near = lerp(80, 720, atmosphericProgress);
+    scene.fog.far = lerp(320, 1800, atmosphericProgress);
+  }
+  hemiLight.intensity = lerp(2.35, 3.2, atmosphericProgress);
+  sunLight.intensity = lerp(1.35, 3.05, atmosphericProgress);
   sunLight.color.copy(new THREE.Color('#ffffff')).lerp(new THREE.Color('#ffe2b8'), atmosphericProgress * 0.78);
-  bloom.strength = lerp(0.18, 0.44, atmosphericProgress);
-  bloom.threshold = lerp(0.84, 0.72, atmosphericProgress);
-  renderer.toneMappingExposure = lerp(1.04, 1.18, atmosphericProgress);
+  bloom.strength = lerp(0.10, 0.30, atmosphericProgress);
+  bloom.threshold = lerp(0.88, 0.76, atmosphericProgress);
+  renderer.toneMappingExposure = lerp(1.10, 1.26, atmosphericProgress);
 }
 
 function updateInterface(delta) {
