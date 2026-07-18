@@ -917,29 +917,46 @@ const wheelGeometry = new THREE.CylinderGeometry(0.43, 0.43, 0.26, 12);
   });
 });
 
-const headMaterial = new THREE.MeshStandardMaterial({ color: '#151619', roughness: 0.65 });
-const glowMaterial = new THREE.MeshBasicMaterial({ color: '#fff4c7', toneMapped: false });
+const headMaterial = new THREE.MeshStandardMaterial({ color: '#111217', roughness: 0.66, flatShading: true });
 const robeMaterial = new THREE.MeshStandardMaterial({
-  color: '#e6d3c1',
+  color: '#ead7c9',
   roughness: 0.84,
   side: THREE.DoubleSide,
   flatShading: true,
 });
 const hairMaterial = new THREE.MeshStandardMaterial({
-  color: '#f2ece2',
+  color: '#f6f0e8',
   roughness: 0.92,
   flatShading: true,
 });
 const furMaterial = new THREE.MeshStandardMaterial({
-  color: '#eee5d8',
+  color: '#f8efe4',
   roughness: 1,
   flatShading: true,
 });
 const capeMaterial = new THREE.MeshStandardMaterial({
-  color: '#d98663',
-  emissive: '#7d3828',
-  emissiveIntensity: 0.16,
+  color: '#e47d63',
+  emissive: '#8d3f31',
+  emissiveIntensity: 0.18,
   roughness: 0.78,
+  side: THREE.DoubleSide,
+  flatShading: true,
+});
+const capeLiningMaterial = new THREE.MeshStandardMaterial({
+  color: '#f4c7b7',
+  roughness: 0.88,
+  side: THREE.DoubleSide,
+  flatShading: true,
+});
+const goldMaterial = new THREE.MeshStandardMaterial({
+  color: '#d7a653',
+  roughness: 0.48,
+  metalness: 0.08,
+  flatShading: true,
+});
+const motifMaterial = new THREE.MeshStandardMaterial({
+  color: '#8c4b47',
+  roughness: 0.9,
   side: THREE.DoubleSide,
   flatShading: true,
 });
@@ -948,99 +965,169 @@ const playerInkMaterials = [
   { material: carBodyMaterial, ink: new THREE.Color('#000000'), target: PALETTE.orange.clone() },
   { material: carCreamMaterial, ink: new THREE.Color('#ffffff'), target: PALETTE.cream.clone() },
   { material: blueAccentMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#7696a8') },
-  { material: headMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#151619') },
-  { material: robeMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#e6d3c1') },
-  { material: hairMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#f2ece2') },
-  { material: furMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#eee5d8') },
-  { material: capeMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#d98663') },
+  { material: headMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#111217') },
+  { material: robeMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#ead7c9') },
+  { material: hairMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#f6f0e8') },
+  { material: furMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#f8efe4') },
+  { material: capeMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#e47d63') },
+  { material: capeLiningMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#f4c7b7') },
+  { material: goldMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#d7a653') },
+  { material: motifMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#8c4b47') },
 ];
 playerInkMaterials.forEach(({ material, ink }) => material.color.copy(ink));
-const capeEmissiveTarget = new THREE.Color('#7d3828');
+const capeEmissiveTarget = new THREE.Color('#8d3f31');
 const capeEmissiveInk = new THREE.Color('#000000');
 capeMaterial.emissive.set('#000000');
 
 const driver = new THREE.Group();
 driver.position.set(0, 1.24, 0.48);
+driver.scale.setScalar(1.06);
 car.add(driver);
 
-const torso = new THREE.Mesh(new THREE.ConeGeometry(0.52, 1.34, 7), robeMaterial);
-torso.position.y = 0.42;
-torso.rotation.z = Math.PI;
+const robeProfile = [
+  new THREE.Vector2(0.57, 0),
+  new THREE.Vector2(0.59, 0.18),
+  new THREE.Vector2(0.51, 0.62),
+  new THREE.Vector2(0.39, 1.04),
+  new THREE.Vector2(0.27, 1.26),
+];
+const torso = new THREE.Mesh(new THREE.LatheGeometry(robeProfile, 8), robeMaterial);
+torso.position.y = -0.22;
+torso.rotation.y = Math.PI / 8;
 torso.castShadow = true;
 driver.add(torso);
 
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 9), headMaterial);
-head.position.set(0, 1.14, -0.08);
-head.scale.set(0.96, 1.08, 0.93);
-driver.add(head);
+const mantle = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.72, 7, 1, true), robeMaterial);
+mantle.position.set(0, 0.68, -0.01);
+mantle.castShadow = true;
+driver.add(mantle);
 
-const hood = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.095, 7, 14), robeMaterial);
-hood.position.set(0, 1.08, -0.015);
-hood.rotation.x = Math.PI / 2;
-driver.add(hood);
+const collar = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.075, 6, 16), capeMaterial);
+collar.position.set(0, 0.93, 0.01);
+collar.rotation.x = Math.PI / 2;
+driver.add(collar);
+
+const hairShell = new THREE.Mesh(new THREE.SphereGeometry(0.43, 12, 9), hairMaterial);
+hairShell.position.set(0, 1.22, 0.015);
+hairShell.scale.set(1.09, 1.13, 0.88);
+hairShell.castShadow = true;
+driver.add(hairShell);
+
+const faceMask = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 9), headMaterial);
+faceMask.position.set(0, 1.18, -0.30);
+faceMask.scale.set(0.92, 1.07, 0.48);
+faceMask.castShadow = true;
+driver.add(faceMask);
 
 const hairTufts = [
-  [-0.28, 1.42, -0.02, -0.48, 0.08, 0.48],
-  [-0.08, 1.50, -0.04, -0.16, 0.04, 0.56],
-  [0.14, 1.48, -0.03, 0.22, -0.04, 0.52],
-  [0.31, 1.37, -0.01, 0.5, -0.08, 0.44],
-  [-0.38, 1.22, -0.01, -0.75, 0.08, 0.38],
-  [0.39, 1.20, -0.01, 0.78, -0.04, 0.36],
+  [-0.31, 1.43, -0.13, 0.06, -0.34, -0.46, 0.50, 0.17],
+  [-0.11, 1.56, -0.08, 0.02, -0.08, -0.17, 0.56, 0.18],
+  [0.12, 1.54, -0.07, -0.03, 0.12, 0.18, 0.53, 0.17],
+  [0.32, 1.43, -0.12, -0.05, 0.32, 0.48, 0.48, 0.16],
+  [-0.43, 1.26, -0.08, 0.08, -0.18, -0.78, 0.43, 0.15],
+  [0.43, 1.24, -0.06, -0.08, 0.18, 0.80, 0.41, 0.15],
+  [-0.22, 1.31, -0.32, 0.22, -0.12, -0.38, 0.38, 0.14],
+  [0.22, 1.30, -0.33, -0.22, 0.12, 0.38, 0.36, 0.14],
 ];
-hairTufts.forEach(([x, y, z, rz, rx, length], index) => {
-  const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.14 + (index % 2) * 0.025, length, 5), hairMaterial);
+hairTufts.forEach(([x, y, z, rx, ry, rz, length, width], index) => {
+  const tuft = new THREE.Mesh(new THREE.ConeGeometry(width, length, 5), hairMaterial);
   tuft.position.set(x, y, z);
-  tuft.rotation.set(rx, index * 0.42, rz);
+  tuft.rotation.set(rx, ry + index * 0.035, rz);
   tuft.castShadow = true;
   driver.add(tuft);
 });
 
 [-1, 1].forEach((side) => {
-  const earFin = new THREE.Mesh(new THREE.ConeGeometry(0.105, 0.34, 4), capeMaterial);
-  earFin.position.set(side * 0.43, 1.27, -0.02);
-  earFin.rotation.z = side * -1.1;
-  earFin.rotation.y = side * 0.18;
+  const earFin = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.48, 3), capeMaterial);
+  earFin.position.set(side * 0.52, 1.30, -0.04);
+  earFin.rotation.z = side * -1.24;
+  earFin.rotation.y = side * 0.24;
   driver.add(earFin);
 
-  const shoulder = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 1), furMaterial);
-  shoulder.position.set(side * 0.43, 0.72, 0.02);
-  shoulder.scale.set(1.15, 0.82, 1.05);
-  shoulder.castShadow = true;
-  driver.add(shoulder);
+  const clasp = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.11, 7), goldMaterial);
+  clasp.position.set(side * 0.31, 0.91, -0.30);
+  clasp.rotation.z = Math.PI / 2;
+  clasp.castShadow = true;
+  driver.add(clasp);
 
-  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 0.58, 6), robeMaterial);
-  sleeve.position.set(side * 0.34, 0.64, -0.29);
-  sleeve.rotation.x = Math.PI * 0.52;
-  sleeve.rotation.z = side * -0.22;
+  const furTufts = [
+    [0.40, 0.77, 0.02, 0.21],
+    [0.52, 0.78, 0.03, 0.19],
+    [0.47, 0.91, 0.04, 0.18],
+    [0.59, 0.88, 0.06, 0.15],
+  ];
+  furTufts.forEach(([x, y, z, radius], index) => {
+    const tuft = new THREE.Mesh(new THREE.IcosahedronGeometry(radius, 1), furMaterial);
+    tuft.position.set(side * x, y, z + index * 0.012);
+    tuft.scale.set(1.08, 0.86, 1.02);
+    tuft.rotation.set(index * 0.23, side * index * 0.34, 0);
+    tuft.castShadow = true;
+    driver.add(tuft);
+  });
+
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.18, 0.62, 6), robeMaterial);
+  sleeve.position.set(side * 0.37, 0.57, -0.31);
+  sleeve.rotation.x = Math.PI * 0.54;
+  sleeve.rotation.z = side * -0.26;
   sleeve.castShadow = true;
   driver.add(sleeve);
 
-  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.085, 7, 5), headMaterial);
-  hand.position.set(side * 0.32, 0.64, -0.57);
+  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.10, 7, 5), headMaterial);
+  hand.position.set(side * 0.34, 0.56, -0.62);
+  hand.scale.set(0.82, 1.12, 0.72);
   driver.add(hand);
 });
 
-[-0.12, 0.12].forEach((x) => {
-  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), glowMaterial);
-  eye.position.set(x, 1.15, -0.32);
-  eye.scale.set(1, 0.75, 0.5);
-  driver.add(eye);
+[
+  [-0.18, 0.23, 0.085, -0.18],
+  [0.17, 0.15, 0.07, 0.22],
+  [-0.08, 0.54, 0.065, 0.42],
+  [0.24, 0.46, 0.055, -0.34],
+].forEach(([x, y, size, rotation]) => {
+  const motif = new THREE.Mesh(new THREE.CircleGeometry(size, 3), motifMaterial);
+  motif.position.set(x, y, 0.54);
+  motif.rotation.z = rotation;
+  motif.userData.noInkOutline = true;
+  driver.add(motif);
 });
 
 const capeShape = new THREE.Shape();
-capeShape.moveTo(-0.5, 0);
-capeShape.lineTo(0.5, 0);
-capeShape.lineTo(0.92, 1.48);
-capeShape.lineTo(0.28, 1.25);
-capeShape.lineTo(0, 1.5);
-capeShape.lineTo(-0.32, 1.22);
-capeShape.lineTo(-0.92, 1.48);
+capeShape.moveTo(-0.42, 0);
+capeShape.lineTo(0.43, 0);
+capeShape.lineTo(1.02, 0.82);
+capeShape.lineTo(0.70, 1.12);
+capeShape.lineTo(0.92, 1.52);
+capeShape.lineTo(0.24, 1.31);
+capeShape.lineTo(-0.06, 1.62);
+capeShape.lineTo(-0.43, 1.30);
+capeShape.lineTo(-0.93, 1.50);
+capeShape.lineTo(-1.04, 0.84);
 capeShape.closePath();
-const cape = new THREE.Mesh(new THREE.ShapeGeometry(capeShape), capeMaterial);
+
+const cape = new THREE.Group();
 const CAPE_REST_X = Math.PI / 2 + 0.28;
 cape.position.set(0, 0.72, 0.42);
 cape.rotation.set(CAPE_REST_X, 0, 0);
-cape.castShadow = true;
+
+const capeLining = new THREE.Mesh(new THREE.ShapeGeometry(capeShape), capeLiningMaterial);
+capeLining.scale.set(1.08, 1.05, 1);
+capeLining.position.z = 0.018;
+capeLining.castShadow = true;
+cape.add(capeLining);
+
+const capePanel = new THREE.Mesh(new THREE.ShapeGeometry(capeShape), capeMaterial);
+capePanel.scale.set(0.96, 0.94, 1);
+capePanel.position.y = 0.025;
+capePanel.position.z = -0.006;
+capePanel.castShadow = true;
+cape.add(capePanel);
+
+[-0.73, 0.75].forEach((x, index) => {
+  const capePuff = new THREE.Mesh(new THREE.IcosahedronGeometry(0.13, 1), furMaterial);
+  capePuff.position.set(x, 1.28 + index * 0.04, -0.02);
+  capePuff.scale.set(1.18, 0.82, 0.86);
+  cape.add(capePuff);
+});
 driver.add(cape);
 
 const driverGlow = new THREE.PointLight('#f0a36f', 0, 5.5, 2);
@@ -1057,7 +1144,7 @@ car.add(carShadow);
 const playerInkEdges = [];
 const playerInkMeshes = [];
 car.traverse((object) => {
-  if (!object.isMesh || object === carShadow || object.material === glowMaterial) return;
+  if (!object.isMesh || object === carShadow || object.userData.noInkOutline) return;
   playerInkMeshes.push(object);
 });
 playerInkMeshes.forEach((object) => {
