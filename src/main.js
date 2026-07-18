@@ -39,7 +39,7 @@ const smoothstep = (a, b, x) => {
 };
 
 const PALETTE = {
-  paper: new THREE.Color('#f7f3e9'),
+  paper: new THREE.Color('#ffffff'),
   sky: new THREE.Color('#80bad7'),
   fogWarm: new THREE.Color('#ead6bd'),
   grass: new THREE.Color('#72a66c'),
@@ -56,7 +56,7 @@ const PALETTE = {
   lavender: new THREE.Color('#8f75ba'),
   blue: new THREE.Color('#5595ba'),
   gold: new THREE.Color('#e7b548'),
-  ink: new THREE.Color('#161616'),
+  ink: new THREE.Color('#000000'),
 };
 
 const SEED_PALETTE = [
@@ -109,13 +109,13 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.22;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = PALETTE.paper.clone();
-scene.fog = new THREE.Fog(PALETTE.paper.clone(), 70, 260);
+scene.fog = new THREE.Fog(PALETTE.paper.clone(), 90, 400);
 
 const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 12000);
 camera.position.set(0, 4.6, 11);
@@ -124,18 +124,18 @@ const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.32,
-  0.72,
-  0.73,
+  0.06,
+  0.48,
+  0.92,
 );
 composer.addPass(bloom);
 
 // Lighting --------------------------------------------------------------------
 
-const hemiLight = new THREE.HemisphereLight('#fffdf8', '#d5cec3', 2.25);
+const hemiLight = new THREE.HemisphereLight('#ffffff', '#bdbdbd', 2.65);
 scene.add(hemiLight);
 
-const sunLight = new THREE.DirectionalLight('#fff0d9', 2.6);
+const sunLight = new THREE.DirectionalLight('#ffffff', 1.85);
 sunLight.position.set(-28, 45, 26);
 sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(1024, 1024);
@@ -209,6 +209,21 @@ const revealFragmentShader = /* glsl */`
     return value;
   }
 
+  float inkSplatter(vec2 point, float scale, float cutoff) {
+    vec2 grid = point * scale;
+    vec2 cell = floor(grid);
+    vec2 local = fract(grid) - 0.5;
+    float chance = hash(cell + vec2(19.7, 4.3));
+    vec2 center = vec2(
+      hash(cell + vec2(2.1, 17.4)),
+      hash(cell + vec2(31.8, 8.6))
+    ) - 0.5;
+    center *= 0.72;
+    float radius = mix(0.035, 0.16, hash(cell + vec2(7.7, 27.2)));
+    float dot = 1.0 - smoothstep(radius, radius + 0.035, length(local - center));
+    return dot * step(cutoff, chance);
+  }
+
   float revealField(vec2 point) {
     float revealed = uGlobal;
     float paper = fbm(point * 0.045) * 0.22 + noise(point * 0.16) * 0.08;
@@ -232,27 +247,44 @@ const revealFragmentShader = /* glsl */`
     float fibers = noise(p * vec2(0.55, 0.16));
     vec3 living = mix(uColorA, uColorB, broadNoise * 0.76 + fibers * 0.10);
 
-    // Before color arrives, layer broad ink blooms, pooled pigment and dry
-    // brush grain over the paper instead of showing a flat white surface.
-    float washCloud = fbm(p * 0.032 + vec2(7.4, 3.1));
-    float washPool = smoothstep(0.42, 0.74, washCloud);
-    float inkRim = 1.0 - smoothstep(0.035, 0.20, abs(noise(p * 0.085 + 4.2) - 0.52));
-    float dryBrush = smoothstep(0.48, 0.78, noise(p * vec2(0.34, 0.82) + 11.7));
-    float paperFiber = noise(p * vec2(1.6, 0.22));
-    float inkDepth = washPool * 0.17 + inkRim * 0.075 + dryBrush * 0.045 + paperFiber * 0.025;
+    // The opening is built from white paper, solid black pigment and a narrow
+    // grey feathered edge. Ink islands, dry-brush strokes and scattered drops
+    // disappear naturally wherever the color-reveal field reaches them.
+    float washCloud = fbm(p * 0.030 + vec2(7.4, 3.1));
+    float washBody = smoothstep(0.47, 0.67, washCloud);
+    float washCore = smoothstep(0.66, 0.76, washCloud);
+    float washFeather = clamp(washBody - washCore, 0.0, 1.0);
+    float inkRim = 1.0 - smoothstep(0.025, 0.13, abs(noise(p * 0.082 + 4.2) - 0.52));
+    float dryBrush = smoothstep(0.57, 0.79, noise(p * vec2(0.36, 0.78) + 11.7));
+    float paperFiber = noise(p * vec2(1.7, 0.23));
+    float largeDrops = inkSplatter(p + vec2(13.0, 5.0), 0.11, 0.79);
+    float fineDrops = inkSplatter(p + vec2(-8.0, 21.0), 0.34, 0.91);
+
+    float blackInk = washCore;
+    blackInk = max(blackInk, inkRim * washBody * 0.82);
+    blackInk = max(blackInk, dryBrush * washBody * 0.72);
+    blackInk = max(blackInk, largeDrops);
+    blackInk = max(blackInk, fineDrops * 0.94);
+    float greyInk = washFeather * 0.52 + (1.0 - paperFiber) * washBody * 0.08;
     if (uRoad > 0.5) {
-      float roadStroke = smoothstep(0.32, 0.78, noise(p * vec2(0.72, 0.055)));
-      inkDepth += roadStroke * 0.075;
+      float roadStroke = smoothstep(0.60, 0.76, noise(p * vec2(0.72, 0.055)));
+      blackInk = max(blackInk, roadStroke * 0.76);
+      greyInk = max(greyInk, smoothstep(0.42, 0.64, noise(p * vec2(0.15, 0.68))) * 0.24);
     }
-    vec3 inkPaper = uMono * (1.015 - inkDepth);
-    inkPaper = mix(inkPaper, vec3(0.10), inkRim * washPool * 0.07);
+    float inkAmount = clamp(max(blackInk, greyInk), 0.0, 1.0);
+    vec3 paperWhite = mix(vec3(1.0), uMono, 0.08);
+    vec3 inkPaper = mix(paperWhite, vec3(0.0), inkAmount);
+    inkPaper -= (paperFiber - 0.5) * 0.018;
+    inkPaper = clamp(inkPaper, 0.0, 1.0);
 
     if (uRoad > 0.5) {
       float wear = smoothstep(0.32, 0.72, noise(p * vec2(0.16, 0.7)));
       living *= 0.94 + wear * 0.07;
     }
     vec3 color = mix(inkPaper, living, reveal);
-    color += (hash(gl_FragCoord.xy + uTime) - 0.5) * 0.012;
+    vec3 graphicInk = smoothstep(vec3(0.045), vec3(0.955), color);
+    color = mix(graphicInk, color, reveal);
+    color += (hash(gl_FragCoord.xy + uTime) - 0.5) * mix(0.006, 0.010, reveal);
     float fogFactor = smoothstep(uFogNear, uFogFar, vViewDepth);
     color = mix(color, uFogColor, fogFactor);
     gl_FragColor = vec4(color, 1.0);
@@ -283,7 +315,7 @@ function createRevealMaterial(mono, colorA, colorB, road = false) {
 
 const terrain = new THREE.Mesh(
   new THREE.PlaneGeometry(270, 3800, 1, 1),
-  createRevealMaterial('#f8f5ee', '#70a96c', '#d7ba69'),
+  createRevealMaterial('#ffffff', '#70a96c', '#d7ba69'),
 );
 terrain.rotation.x = -Math.PI / 2;
 terrain.position.set(0, -0.07, -1760);
@@ -292,7 +324,7 @@ scene.add(terrain);
 
 const road = new THREE.Mesh(
   new THREE.PlaneGeometry(13.8, 3600, 1, 1),
-  createRevealMaterial('#d9d6d0', '#a48172', '#d8aa78', true),
+  createRevealMaterial('#ffffff', '#a48172', '#d8aa78', true),
 );
 road.rotation.x = -Math.PI / 2;
 road.position.set(0, 0, -1700);
@@ -315,8 +347,8 @@ function createSketchEdgeGeometry(geometry, threshold) {
   const jitter = clamp(radius * 0.0045, 0.004, 0.038);
   const positions = edgeGeometry.attributes.position;
   const colors = [];
-  const darkInk = new THREE.Color('#171614');
-  const paleInk = new THREE.Color('#625c52');
+  const darkInk = new THREE.Color('#000000');
+  const featherInk = new THREE.Color('#303030');
 
   for (let i = 0; i < positions.count; i += 1) {
     const x = positions.getX(i);
@@ -332,7 +364,8 @@ function createSketchEdgeGeometry(geometry, threshold) {
       y + (randomB - 0.5) * jitter,
       z + (random * 0.62 - randomB * 0.38) * jitter,
     );
-    const inkColor = darkInk.clone().lerp(paleInk, 0.12 + random * 0.52);
+    const feather = smoothstep(0.72, 1, random) * 0.62;
+    const inkColor = darkInk.clone().lerp(featherInk, feather);
     colors.push(inkColor.r, inkColor.g, inkColor.b);
   }
 
@@ -343,10 +376,7 @@ function createSketchEdgeGeometry(geometry, threshold) {
 
 function outlinedMesh(geometry, targetColor, options = {}) {
   const target = new THREE.Color(targetColor);
-  const targetHsl = {};
-  target.getHSL(targetHsl);
-  const inkLightness = lerp(0.69, 0.94, clamp(targetHsl.l, 0, 1));
-  const mono = new THREE.Color().setHSL(0, 0, inkLightness);
+  const mono = new THREE.Color(options.inkFill ?? '#ffffff');
   const material = new THREE.MeshStandardMaterial({
     color: mono,
     roughness: options.roughness ?? 0.86,
@@ -361,14 +391,16 @@ function outlinedMesh(geometry, targetColor, options = {}) {
   mesh.castShadow = options.castShadow ?? true;
   mesh.receiveShadow = options.receiveShadow ?? true;
 
+  const requestedInkOpacity = options.edgeOpacity ?? 0.84;
+  const inkOpacity = clamp(0.38 + requestedInkOpacity * 0.68, 0.56, 0.98);
   const edgeMaterial = new THREE.LineBasicMaterial({
-    color: '#ffffff',
+    color: '#000000',
     vertexColors: true,
     transparent: true,
-    opacity: options.edgeOpacity ?? 0.74,
+    opacity: inkOpacity,
     depthWrite: false,
   });
-  edgeMaterial.userData.inkOpacity = options.edgeOpacity ?? 0.74;
+  edgeMaterial.userData.inkOpacity = inkOpacity;
   const edges = new THREE.LineSegments(createSketchEdgeGeometry(geometry, options.edgeThreshold ?? 18), edgeMaterial);
   mesh.add(edges);
   return {
@@ -500,7 +532,7 @@ function createGrassPatch(x, z, scale = 1) {
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  const material = new THREE.LineBasicMaterial({ color: '#171717', transparent: true, opacity: 0.72 });
+  const material = new THREE.LineBasicMaterial({ color: '#000000', transparent: true, opacity: 0.90 });
   const grass = new THREE.LineSegments(geometry, material);
   grass.scale.setScalar(scale);
   group.add(grass);
@@ -710,7 +742,7 @@ for (let z = -35; z > -3520; z -= 24) {
   registerScenery(group, 0, z, [marker.part], [marker.edge]);
 }
 
-const roadEdgeMaterial = new THREE.LineBasicMaterial({ color: '#252525', transparent: true, opacity: 0.56 });
+const roadEdgeMaterial = new THREE.LineBasicMaterial({ color: '#000000', transparent: true, opacity: 0.92 });
 [-6.9, 6.9].forEach((x) => {
   const geometry = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(x, 0.06, 25),
@@ -852,7 +884,7 @@ const carCreamMaterial = new THREE.MeshStandardMaterial({
   roughness: 0.72,
   flatShading: true,
 });
-const tireMaterial = new THREE.MeshStandardMaterial({ color: '#242321', roughness: 0.94 });
+const tireMaterial = new THREE.MeshStandardMaterial({ color: '#000000', roughness: 0.94 });
 
 const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.56, 3.6), carBodyMaterial);
 body.position.y = 0.78;
@@ -911,6 +943,21 @@ const capeMaterial = new THREE.MeshStandardMaterial({
   side: THREE.DoubleSide,
   flatShading: true,
 });
+
+const playerInkMaterials = [
+  { material: carBodyMaterial, ink: new THREE.Color('#000000'), target: PALETTE.orange.clone() },
+  { material: carCreamMaterial, ink: new THREE.Color('#ffffff'), target: PALETTE.cream.clone() },
+  { material: blueAccentMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#7696a8') },
+  { material: headMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#151619') },
+  { material: robeMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#e6d3c1') },
+  { material: hairMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#f2ece2') },
+  { material: furMaterial, ink: new THREE.Color('#ffffff'), target: new THREE.Color('#eee5d8') },
+  { material: capeMaterial, ink: new THREE.Color('#000000'), target: new THREE.Color('#d98663') },
+];
+playerInkMaterials.forEach(({ material, ink }) => material.color.copy(ink));
+const capeEmissiveTarget = new THREE.Color('#7d3828');
+const capeEmissiveInk = new THREE.Color('#000000');
+capeMaterial.emissive.set('#000000');
 
 const driver = new THREE.Group();
 driver.position.set(0, 1.24, 0.48);
@@ -996,16 +1043,31 @@ cape.rotation.set(CAPE_REST_X, 0, 0);
 cape.castShadow = true;
 driver.add(cape);
 
-const driverGlow = new THREE.PointLight('#f0a36f', 0.34, 5.5, 2);
+const driverGlow = new THREE.PointLight('#f0a36f', 0, 5.5, 2);
 driverGlow.position.set(0, 0.9, 0.35);
 driver.add(driverGlow);
 
-const carShadowMaterial = new THREE.MeshBasicMaterial({ color: '#22201d', transparent: true, opacity: 0.15, depthWrite: false });
+const carShadowMaterial = new THREE.MeshBasicMaterial({ color: '#000000', transparent: true, opacity: 0.14, depthWrite: false });
 const carShadow = new THREE.Mesh(new THREE.CircleGeometry(1.65, 24), carShadowMaterial);
 carShadow.rotation.x = -Math.PI / 2;
 carShadow.scale.set(0.72, 1.3, 1);
 carShadow.position.y = 0.035;
 car.add(carShadow);
+
+const playerInkEdges = [];
+car.traverse((object) => {
+  if (!object.isMesh || object === carShadow || object.material === glowMaterial) return;
+  const inkMaterial = new THREE.LineBasicMaterial({
+    color: '#000000',
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.94,
+    depthWrite: false,
+  });
+  const inkLines = new THREE.LineSegments(createSketchEdgeGeometry(object.geometry, 16), inkMaterial);
+  object.add(inkLines);
+  playerInkEdges.push(inkMaterial);
+});
 
 // Particle feedback -----------------------------------------------------------
 
@@ -1333,7 +1395,7 @@ function updateWorldMaterials(delta) {
     for (const edge of item.edges) edge.opacity = lerp(edge.userData.inkOpacity ?? 0.74, 0.08, item.reveal);
     if (item.lineMaterial) {
       item.lineMaterial.color.copy(PALETTE.ink).lerp(item.lineTarget, item.reveal);
-      item.lineMaterial.opacity = lerp(0.7, 0.52, item.reveal);
+      item.lineMaterial.opacity = lerp(0.90, 0.52, item.reveal);
     }
     if (item.sway !== undefined) {
       item.root.rotation.z = Math.sin(state.elapsed * 0.65 + item.sway) * 0.012;
@@ -1343,7 +1405,15 @@ function updateWorldMaterials(delta) {
     }
   }
 
-  roadEdgeMaterial.opacity = lerp(0.56, 0.16, smoothstep(0.25, 0.95, state.progress));
+  const playerReveal = smoothstep(0.01, 0.42, state.progress);
+  for (const part of playerInkMaterials) {
+    part.material.color.copy(part.ink).lerp(part.target, playerReveal);
+  }
+  capeMaterial.emissive.copy(capeEmissiveInk).lerp(capeEmissiveTarget, playerReveal);
+  driverGlow.intensity = lerp(0, 0.34, playerReveal);
+  for (const edge of playerInkEdges) edge.opacity = lerp(0.94, 0.08, playerReveal);
+
+  roadEdgeMaterial.opacity = lerp(0.92, 0.16, smoothstep(0.25, 0.95, state.progress));
 }
 
 function updatePlayer(delta) {
@@ -1527,15 +1597,15 @@ function updateAtmosphere() {
     scene.fog.near = 9000;
     scene.fog.far = 11000;
   } else {
-    scene.fog.near = lerp(80, 720, atmosphericProgress);
-    scene.fog.far = lerp(320, 1800, atmosphericProgress);
+    scene.fog.near = lerp(110, 720, atmosphericProgress);
+    scene.fog.far = lerp(450, 1800, atmosphericProgress);
   }
-  hemiLight.intensity = lerp(2.35, 3.2, atmosphericProgress);
-  sunLight.intensity = lerp(1.35, 3.05, atmosphericProgress);
+  hemiLight.intensity = lerp(2.65, 3.2, atmosphericProgress);
+  sunLight.intensity = lerp(1.85, 3.05, atmosphericProgress);
   sunLight.color.copy(new THREE.Color('#ffffff')).lerp(new THREE.Color('#ffe2b8'), atmosphericProgress * 0.78);
-  bloom.strength = lerp(0.10, 0.30, atmosphericProgress);
-  bloom.threshold = lerp(0.88, 0.76, atmosphericProgress);
-  renderer.toneMappingExposure = lerp(1.10, 1.26, atmosphericProgress);
+  bloom.strength = lerp(0.035, 0.30, atmosphericProgress);
+  bloom.threshold = lerp(0.92, 0.76, atmosphericProgress);
+  renderer.toneMappingExposure = lerp(1.22, 1.26, atmosphericProgress);
   const inkStage = 1 - smoothstep(0.02, 0.72, state.progress);
   if (Math.abs(inkStage - state.inkStage) > 0.004) {
     state.inkStage = inkStage;
