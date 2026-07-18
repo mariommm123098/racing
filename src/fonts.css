@@ -1,0 +1,13 @@
+/* Only the CJK glyph slices used by this game are bundled. This keeps the
+   offline build small while preserving an elegant Chinese serif face. */
+@font-face { font-family: 'Chroma CJK 109'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-109-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 110'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-110-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 111'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-111-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 113'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-113-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 114'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-114-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 115'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-115-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 116'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-116-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 117'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-117-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 118'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-118-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Chroma CJK 119'; font-style: normal; font-display: swap; font-weight: 400; src: url('../node_modules/@fontsource/noto-serif-sc/files/noto-serif-sc-119-400-normal.woff2') format('woff2'); }
+

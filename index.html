@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f5f2ec" />
+    <meta name="description" content="CHROMA：让失去颜色的世界重新苏醒。原创艺术赛车游戏原型。" />
+    <title>CHROMA — 余彩</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="world" aria-label="CHROMA 游戏画面"></canvas>
+
+      <section id="intro" class="intro">
+        <div class="eyebrow">A PLAYABLE FILM</div>
+        <h1>CHROMA</h1>
+        <div class="cn-title">余 彩</div>
+        <p>世界忘记了颜色。<br />沿着风的方向，把它们带回来。</p>
+        <button id="startButton" class="start-button" type="button">
+          <span>开始旅程</span>
+          <small>BEGIN THE JOURNEY</small>
+        </button>
+        <div class="controls-hint">A D / ← → 驾驶　·　W S / ↑ ↓ 调速　·　P 暂停</div>
+      </section>
+
+      <section id="hud" class="hud" aria-live="polite">
+        <div class="stat">
+          <span>DISTANCE</span>
+          <strong id="distance">0000 <i>m</i></strong>
+        </div>
+        <div class="stat">
+          <span>SPEED</span>
+          <strong id="speed">000 <i>km/h</i></strong>
+        </div>
+        <div class="progress-stat">
+          <div class="progress-copy">
+            <span>COLOR RECOVERED</span>
+            <strong id="progressText">00%</strong>
+          </div>
+          <div class="progress-track"><i id="progressBar"></i></div>
+        </div>
+      </section>
+
+      <section id="chapter" class="chapter" aria-live="polite">
+        <div id="chapterNumber">CHAPTER I</div>
+        <strong id="chapterGlyph">线</strong>
+        <span id="chapterName">SKETCH</span>
+      </section>
+
+      <div id="seedNotice" class="seed-notice">
+        <span id="seedColor">AZURE</span>
+        <strong>COLOR SEED</strong>
+      </div>
+
+      <section id="ending" class="ending">
+        <div class="eyebrow">THE WORLD REMEMBERS</div>
+        <h2>晨</h2>
+        <p>你没有抵达终点。<br />你让沿途重新成为了世界。</p>
+        <button id="restartButton" type="button">再一次启程</button>
+      </section>
+
+      <button id="soundToggle" class="sound-toggle" type="button" aria-label="切换声音">SOUND ON</button>
+      <div id="pauseLabel" class="pause-label">PAUSED<br /><small>按 P 继续</small></div>
+
+      <div class="touch-controls" aria-label="触屏控制">
+        <button id="touchLeft" type="button" aria-label="向左">←</button>
+        <button id="touchRight" type="button" aria-label="向右">→</button>
+      </div>
+
+      <div class="film-grain"></div>
+      <div class="vignette"></div>
+      <div id="flash" class="flash"></div>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
