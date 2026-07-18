@@ -52,6 +52,10 @@ const PALETTE = {
   pine: new THREE.Color('#718979'),
   mountain: new THREE.Color('#9a94a0'),
   cloud: new THREE.Color('#f3e9dd'),
+  rose: new THREE.Color('#c9958f'),
+  lavender: new THREE.Color('#9b91ad'),
+  blue: new THREE.Color('#829fb0'),
+  gold: new THREE.Color('#d5b56f'),
   ink: new THREE.Color('#161616'),
 };
 
@@ -82,6 +86,11 @@ const state = {
   collected: 0,
   chapter: -1,
   endingTimer: 0,
+  gateSpawned: false,
+  gateCrossed: false,
+  gateZ: 0,
+  gateReveal: 0,
+  cameraTransition: 0,
   elapsed: 0,
   shake: 0,
   seedNoticeTimer: 0,
@@ -105,9 +114,9 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
 scene.background = PALETTE.paper.clone();
-scene.fog = new THREE.Fog(PALETTE.paper.clone(), 40, 180);
+scene.fog = new THREE.Fog(PALETTE.paper.clone(), 28, 105);
 
-const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 320);
+const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 520);
 camera.position.set(0, 4.6, 11);
 
 const composer = new EffectComposer(renderer);
@@ -256,20 +265,20 @@ function createRevealMaterial(mono, colorA, colorB, road = false) {
 }
 
 const terrain = new THREE.Mesh(
-  new THREE.PlaneGeometry(250, 2900, 1, 1),
+  new THREE.PlaneGeometry(270, 3800, 1, 1),
   createRevealMaterial('#f7f5f0', '#91a184', '#ddc39b'),
 );
 terrain.rotation.x = -Math.PI / 2;
-terrain.position.set(0, -0.07, -1360);
+terrain.position.set(0, -0.07, -1760);
 terrain.receiveShadow = true;
 scene.add(terrain);
 
 const road = new THREE.Mesh(
-  new THREE.PlaneGeometry(13.8, 2800, 1, 1),
+  new THREE.PlaneGeometry(13.8, 3600, 1, 1),
   createRevealMaterial('#d7d5d1', '#9f9286', '#cbb59e', true),
 );
 road.rotation.x = -Math.PI / 2;
-road.position.set(0, 0, -1320);
+road.position.set(0, 0, -1700);
 road.receiveShadow = true;
 scene.add(road);
 
@@ -413,34 +422,134 @@ function createGrassPatch(x, z, scale = 1) {
   });
 }
 
-// Distant ranges build the ink-drawn horizon.
-for (let i = 0; i < 24; i += 1) {
-  const side = i % 2 === 0 ? -1 : 1;
-  const z = -70 - i * 105;
-  createMountain(side * (38 + (i % 4) * 10), z, 18 + (i % 3) * 5, 24 + (i % 5) * 4, (i % 3) * 0.012);
+function createShrub(x, z, scale = 1, tone = 0) {
+  const group = new THREE.Group();
+  const parts = [];
+  const edges = [];
+  const colors = [PALETTE.grassLight, PALETTE.pine, PALETTE.lavender];
+  const target = colors[tone % colors.length];
+
+  [[-0.42, 0.48, 0.72], [0.35, 0.42, 0.62], [0, 0.72, 0.82]].forEach(([px, py, s], index) => {
+    const crown = outlinedMesh(
+      new THREE.IcosahedronGeometry(s, 0),
+      target.clone().offsetHSL(index * 0.008, -0.02, index * 0.025),
+      { edgeOpacity: 0.58, edgeThreshold: 10 },
+    );
+    crown.mesh.position.set(px, py, index === 1 ? 0.12 : 0);
+    group.add(crown.mesh);
+    parts.push(crown.part);
+    edges.push(crown.edge);
+  });
+
+  group.scale.setScalar(scale);
+  registerScenery(group, x, z, parts, edges, { sway: Math.random() * Math.PI * 2 });
 }
 
-for (let i = 0; i < 92; i += 1) {
+function createFlowerPatch(x, z, scale = 1, tone = 0) {
+  const group = new THREE.Group();
+  const parts = [];
+  const edges = [];
+  const flowerColors = [PALETTE.rose, PALETTE.gold, PALETTE.lavender, PALETTE.blue];
+
+  for (let i = 0; i < 3; i += 1) {
+    const flowerX = (i - 1) * 0.34;
+    const flowerZ = ((i * 7) % 3 - 1) * 0.18;
+    const height = 0.42 + i * 0.13;
+    const stem = outlinedMesh(new THREE.CylinderGeometry(0.025, 0.04, height, 5), PALETTE.grass, {
+      edgeOpacity: 0.42,
+      castShadow: false,
+    });
+    stem.mesh.position.set(flowerX, height * 0.5, flowerZ);
+    group.add(stem.mesh);
+    parts.push(stem.part);
+    edges.push(stem.edge);
+
+    const bloomPart = outlinedMesh(
+      new THREE.OctahedronGeometry(0.13 + i * 0.012, 0),
+      flowerColors[(tone + i) % flowerColors.length],
+      { edgeOpacity: 0.42, emissive: flowerColors[(tone + i) % flowerColors.length], emissiveIntensity: 0.08, castShadow: false },
+    );
+    bloomPart.mesh.position.set(flowerX, height + 0.08, flowerZ);
+    bloomPart.mesh.rotation.y = i * 0.8;
+    group.add(bloomPart.mesh);
+    parts.push(bloomPart.part);
+    edges.push(bloomPart.edge);
+  }
+
+  group.scale.setScalar(scale);
+  registerScenery(group, x, z, parts, edges, { flowers: true, sway: Math.random() * Math.PI * 2 });
+}
+
+function createWaysideRuin(x, z, scale = 1, tone = 0) {
+  const group = new THREE.Group();
+  const parts = [];
+  const edges = [];
+  const stoneColor = tone % 2 === 0 ? '#b5a99c' : '#aaa2b4';
+  const pieces = [
+    [-1.05, 1.7, 0, 0.55, 3.4, 0.62, 0],
+    [1.05, 1.3, 0.12, 0.55, 2.6, 0.62, 0.06],
+    [-0.12, 3.25, 0.05, 2.65, 0.5, 0.66, -0.08],
+  ];
+
+  pieces.forEach(([px, py, pz, sx, sy, sz, rz], index) => {
+    const stone = outlinedMesh(new THREE.BoxGeometry(sx, sy, sz), new THREE.Color(stoneColor).offsetHSL(0, 0, index * 0.025), {
+      edgeOpacity: 0.62,
+      edgeThreshold: 8,
+    });
+    stone.mesh.position.set(px, py, pz);
+    stone.mesh.rotation.z = rz;
+    group.add(stone.mesh);
+    parts.push(stone.part);
+    edges.push(stone.edge);
+  });
+
+  group.scale.setScalar(scale);
+  registerScenery(group, x, z, parts, edges, { ruin: true });
+}
+
+// Distant ranges build the ink-drawn horizon.
+for (let i = 0; i < 32; i += 1) {
+  const side = i % 2 === 0 ? -1 : 1;
+  const z = -70 - i * 104;
+  createMountain(side * (36 + (i % 4) * 11), z, 18 + (i % 3) * 5, 24 + (i % 5) * 4, (i % 5) * 0.012);
+}
+
+for (let i = 0; i < 118; i += 1) {
   const side = i % 2 === 0 ? -1 : 1;
   const z = -28 - i * 28.5;
   const x = side * (10.5 + ((i * 17) % 20));
   createTree(x, z, 0.72 + ((i * 13) % 9) * 0.085, i % 4 === 0 ? 1 : 0);
 }
 
-for (let i = 0; i < 115; i += 1) {
+for (let i = 0; i < 145; i += 1) {
   const side = i % 2 === 0 ? -1 : 1;
   const z = -16 - i * 22.5;
   const x = side * (8.2 + ((i * 11) % 10));
   createGrassPatch(x, z, 0.85 + (i % 5) * 0.12);
 }
 
-for (let i = 0; i < 15; i += 1) {
+for (let i = 0; i < 20; i += 1) {
   const side = i % 2 === 0 ? -1 : 1;
   createCloud(side * (13 + (i % 4) * 7), 17 + (i % 3) * 2.5, -90 - i * 165, 1.1 + (i % 3) * 0.28);
 }
 
+for (let i = 0; i < 24; i += 1) {
+  const side = i % 2 === 0 ? -1 : 1;
+  createShrub(side * (12.5 + ((i * 7) % 15)), -58 - i * 132, 0.72 + (i % 4) * 0.11, i % 3);
+}
+
+for (let i = 0; i < 28; i += 1) {
+  const side = i % 2 === 0 ? -1 : 1;
+  createFlowerPatch(side * (8.1 + ((i * 5) % 8)), -42 - i * 112, 0.9 + (i % 3) * 0.13, i % 4);
+}
+
+for (let i = 0; i < 8; i += 1) {
+  const side = i % 2 === 0 ? -1 : 1;
+  createWaysideRuin(side * (17 + (i % 3) * 4), -210 - i * 410, 0.78 + (i % 3) * 0.11, i);
+}
+
 // Road markings are outlined paper strips at first, then warm ivory.
-for (let z = -35; z > -2720; z -= 24) {
+for (let z = -35; z > -3520; z -= 24) {
   const marker = outlinedMesh(new THREE.BoxGeometry(0.12, 0.035, 8.5), PALETTE.roadMark, {
     castShadow: false,
     receiveShadow: false,
@@ -456,10 +565,73 @@ const roadEdgeMaterial = new THREE.LineBasicMaterial({ color: '#252525', transpa
 [-6.9, 6.9].forEach((x) => {
   const geometry = new THREE.BufferGeometry().setFromPoints([
     new THREE.Vector3(x, 0.06, 25),
-    new THREE.Vector3(x, 0.06, -2740),
+    new THREE.Vector3(x, 0.06, -3540),
   ]);
   scene.add(new THREE.Line(geometry, roadEdgeMaterial));
 });
+
+// The threshold gate only materializes once the world is fully restored.
+const thresholdGate = new THREE.Group();
+thresholdGate.visible = false;
+scene.add(thresholdGate);
+
+const gateStoneMaterial = new THREE.MeshStandardMaterial({
+  color: '#d8cbbb',
+  roughness: 0.78,
+  metalness: 0.02,
+  flatShading: true,
+  transparent: true,
+  opacity: 1,
+});
+const gateGlowMaterial = new THREE.MeshStandardMaterial({
+  color: '#f1c58c',
+  emissive: '#e49a62',
+  emissiveIntensity: 1.6,
+  roughness: 0.3,
+  toneMapped: false,
+  transparent: true,
+  opacity: 1,
+});
+const gateVeilMaterial = new THREE.MeshBasicMaterial({
+  color: '#f4d8bd',
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  side: THREE.DoubleSide,
+  toneMapped: false,
+});
+
+[-5.55, 5.55].forEach((x, index) => {
+  const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.82, 8.7, 0.92), gateStoneMaterial);
+  pillar.position.set(x, 4.35, 0);
+  pillar.rotation.z = index === 0 ? -0.035 : 0.035;
+  pillar.castShadow = true;
+  thresholdGate.add(pillar);
+
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.55, 1.5), gateStoneMaterial);
+  foot.position.set(x, 0.28, 0);
+  foot.castShadow = true;
+  thresholdGate.add(foot);
+});
+
+const portalRing = new THREE.Mesh(new THREE.TorusGeometry(5.55, 0.28, 7, 40), gateGlowMaterial);
+portalRing.position.y = 5.4;
+portalRing.castShadow = true;
+thresholdGate.add(portalRing);
+
+const gateCrown = new THREE.Mesh(new THREE.OctahedronGeometry(0.48, 0), gateGlowMaterial);
+gateCrown.position.set(0, 10.95, 0);
+gateCrown.rotation.z = Math.PI * 0.25;
+thresholdGate.add(gateCrown);
+
+const portalVeil = new THREE.Mesh(new THREE.CircleGeometry(5.16, 40), gateVeilMaterial);
+portalVeil.position.set(0, 5.4, 0.08);
+thresholdGate.add(portalVeil);
+
+const gateLight = new THREE.PointLight('#ffd3a1', 0, 38, 1.8);
+gateLight.position.set(0, 5.4, 2.5);
+thresholdGate.add(gateLight);
 
 // Color seeds -----------------------------------------------------------------
 
@@ -566,9 +738,27 @@ const wheelGeometry = new THREE.CylinderGeometry(0.43, 0.43, 0.26, 12);
 
 const headMaterial = new THREE.MeshStandardMaterial({ color: '#151619', roughness: 0.65 });
 const glowMaterial = new THREE.MeshBasicMaterial({ color: '#fff4c7', toneMapped: false });
-const cloakMaterial = new THREE.MeshStandardMaterial({
-  color: '#e7d9ca',
+const robeMaterial = new THREE.MeshStandardMaterial({
+  color: '#e6d3c1',
   roughness: 0.84,
+  side: THREE.DoubleSide,
+  flatShading: true,
+});
+const hairMaterial = new THREE.MeshStandardMaterial({
+  color: '#f2ece2',
+  roughness: 0.92,
+  flatShading: true,
+});
+const furMaterial = new THREE.MeshStandardMaterial({
+  color: '#eee5d8',
+  roughness: 1,
+  flatShading: true,
+});
+const capeMaterial = new THREE.MeshStandardMaterial({
+  color: '#d98663',
+  emissive: '#7d3828',
+  emissiveIntensity: 0.16,
+  roughness: 0.78,
   side: THREE.DoubleSide,
   flatShading: true,
 });
@@ -577,21 +767,62 @@ const driver = new THREE.Group();
 driver.position.set(0, 1.24, 0.48);
 car.add(driver);
 
-const torso = new THREE.Mesh(new THREE.ConeGeometry(0.48, 1.25, 7), cloakMaterial);
+const torso = new THREE.Mesh(new THREE.ConeGeometry(0.52, 1.34, 7), robeMaterial);
 torso.position.y = 0.42;
 torso.rotation.z = Math.PI;
 torso.castShadow = true;
 driver.add(torso);
 
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 12), headMaterial);
-head.position.set(0, 1.12, -0.04);
-head.scale.set(0.94, 1.07, 0.92);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 9), headMaterial);
+head.position.set(0, 1.14, -0.08);
+head.scale.set(0.96, 1.08, 0.93);
 driver.add(head);
 
-const hood = new THREE.Mesh(new THREE.TorusGeometry(0.41, 0.09, 7, 16), cloakMaterial);
+const hood = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.095, 7, 14), robeMaterial);
 hood.position.set(0, 1.08, -0.015);
 hood.rotation.x = Math.PI / 2;
 driver.add(hood);
+
+const hairTufts = [
+  [-0.28, 1.42, -0.02, -0.48, 0.08, 0.48],
+  [-0.08, 1.50, -0.04, -0.16, 0.04, 0.56],
+  [0.14, 1.48, -0.03, 0.22, -0.04, 0.52],
+  [0.31, 1.37, -0.01, 0.5, -0.08, 0.44],
+  [-0.38, 1.22, -0.01, -0.75, 0.08, 0.38],
+  [0.39, 1.20, -0.01, 0.78, -0.04, 0.36],
+];
+hairTufts.forEach(([x, y, z, rz, rx, length], index) => {
+  const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.14 + (index % 2) * 0.025, length, 5), hairMaterial);
+  tuft.position.set(x, y, z);
+  tuft.rotation.set(rx, index * 0.42, rz);
+  tuft.castShadow = true;
+  driver.add(tuft);
+});
+
+[-1, 1].forEach((side) => {
+  const earFin = new THREE.Mesh(new THREE.ConeGeometry(0.105, 0.34, 4), capeMaterial);
+  earFin.position.set(side * 0.43, 1.27, -0.02);
+  earFin.rotation.z = side * -1.1;
+  earFin.rotation.y = side * 0.18;
+  driver.add(earFin);
+
+  const shoulder = new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 1), furMaterial);
+  shoulder.position.set(side * 0.43, 0.72, 0.02);
+  shoulder.scale.set(1.15, 0.82, 1.05);
+  shoulder.castShadow = true;
+  driver.add(shoulder);
+
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 0.58, 6), robeMaterial);
+  sleeve.position.set(side * 0.34, 0.64, -0.29);
+  sleeve.rotation.x = Math.PI * 0.52;
+  sleeve.rotation.z = side * -0.22;
+  sleeve.castShadow = true;
+  driver.add(sleeve);
+
+  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.085, 7, 5), headMaterial);
+  hand.position.set(side * 0.32, 0.64, -0.57);
+  driver.add(hand);
+});
 
 [-0.12, 0.12].forEach((x) => {
   const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), glowMaterial);
@@ -601,17 +832,23 @@ driver.add(hood);
 });
 
 const capeShape = new THREE.Shape();
-capeShape.moveTo(-0.46, 0.42);
-capeShape.lineTo(0.46, 0.42);
-capeShape.lineTo(0.78, -1.4);
-capeShape.lineTo(0, -1.12);
-capeShape.lineTo(-0.78, -1.4);
+capeShape.moveTo(-0.5, 0.48);
+capeShape.lineTo(0.5, 0.48);
+capeShape.lineTo(0.92, -1.48);
+capeShape.lineTo(0.28, -1.25);
+capeShape.lineTo(0, -1.5);
+capeShape.lineTo(-0.32, -1.22);
+capeShape.lineTo(-0.92, -1.48);
 capeShape.closePath();
-const cape = new THREE.Mesh(new THREE.ShapeGeometry(capeShape), cloakMaterial);
-cape.position.set(0, 0.85, 0.35);
+const cape = new THREE.Mesh(new THREE.ShapeGeometry(capeShape), capeMaterial);
+cape.position.set(0, 0.88, 0.39);
 cape.rotation.set(-1.16, 0, Math.PI);
 cape.castShadow = true;
 driver.add(cape);
+
+const driverGlow = new THREE.PointLight('#f0a36f', 0.34, 5.5, 2);
+driverGlow.position.set(0, 0.9, 0.35);
+driver.add(driverGlow);
 
 const carShadowMaterial = new THREE.MeshBasicMaterial({ color: '#22201d', transparent: true, opacity: 0.15, depthWrite: false });
 const carShadow = new THREE.Mesh(new THREE.CircleGeometry(1.65, 24), carShadowMaterial);
@@ -900,7 +1137,9 @@ function showChapter(index) {
 }
 
 function worldRevealAt(x, z) {
-  let reveal = smoothstep(0.92, 1, state.progress);
+  const distantWash = smoothstep(0.04, 0.92, state.progress) * 0.32;
+  const finalWash = smoothstep(0.70, 1, state.progress) * 0.68;
+  let reveal = clamp(distantWash + finalWash, 0, 1);
   for (const ripple of ripples) {
     const distance = Math.hypot(x - ripple.x, z - ripple.z);
     reveal = Math.max(reveal, 1 - smoothstep(ripple.radius - 9, ripple.radius + 10, distance));
@@ -913,7 +1152,12 @@ function updateWorldMaterials(delta) {
     ripple.radius = Math.min(ripple.maxRadius, ripple.radius + delta * (54 + state.progress * 24));
   });
 
-  const globalReveal = smoothstep(0.92, 1, state.progress);
+  const globalReveal = clamp(
+    smoothstep(0.04, 0.92, state.progress) * 0.32
+      + smoothstep(0.70, 1, state.progress) * 0.68,
+    0,
+    1,
+  );
   revealMaterials.forEach((material) => {
     material.uniforms.uTime.value = state.elapsed;
     material.uniforms.uGlobal.value = globalReveal;
@@ -928,8 +1172,9 @@ function updateWorldMaterials(delta) {
     }
   });
 
+  const clarityRadius = lerp(135, 390, smoothstep(0.02, 1, state.progress));
   for (const item of scenery) {
-    if (Math.abs(item.z - car.position.z) > 220 && !item.mountain && !item.cloud) continue;
+    if (Math.abs(item.z - car.position.z) > clarityRadius && !item.mountain && !item.cloud) continue;
     const targetReveal = worldRevealAt(item.x, item.z);
     item.reveal = lerp(item.reveal, targetReveal, 1 - Math.exp(-delta * 1.7));
     for (const part of item.parts) {
@@ -957,7 +1202,7 @@ function updatePlayer(delta) {
   state.speed = lerp(state.speed, targetSpeed, 1 - Math.exp(-delta * accelRate));
 
   const steer = (state.keys.right ? 1 : 0) - (state.keys.left ? 1 : 0);
-  const topDownBlend = smoothstep(0.55, 0.92, state.progress);
+  const topDownBlend = smoothstep(0, 1, state.cameraTransition);
   const lateralTarget = steer * lerp(8.7, 12.5, topDownBlend);
   state.lateralVelocity = lerp(state.lateralVelocity, lateralTarget, 1 - Math.exp(-delta * 6.5));
 
@@ -978,6 +1223,58 @@ function updatePlayer(delta) {
   state.progress = clamp(Math.max(collectedProgress + subtleJourney, journeyGuarantee), 0, 1);
 }
 
+function spawnThresholdGate() {
+  if (state.gateSpawned) return;
+  state.gateSpawned = true;
+  state.gateZ = car.position.z - 52;
+  state.gateReveal = 0;
+  thresholdGate.position.set(0, 0, state.gateZ);
+  thresholdGate.scale.setScalar(0.04);
+  thresholdGate.visible = true;
+  gateStoneMaterial.opacity = 0;
+  gateGlowMaterial.opacity = 0;
+  gateVeilMaterial.opacity = 0;
+}
+
+function updateThresholdGate(delta) {
+  if (state.progress >= 0.999 && !state.gateSpawned) spawnThresholdGate();
+  if (!state.gateSpawned) return;
+
+  if (!state.gateCrossed) {
+    state.gateReveal = lerp(state.gateReveal, 1, 1 - Math.exp(-delta * 2.6));
+    const materialize = smoothstep(0, 1, state.gateReveal);
+    thresholdGate.scale.setScalar(lerp(0.04, 1, materialize));
+    gateStoneMaterial.opacity = materialize;
+    gateGlowMaterial.opacity = materialize;
+    gateVeilMaterial.opacity = (0.08 + Math.sin(state.elapsed * 2.6) * 0.025) * materialize;
+    gateLight.intensity = materialize * (2.5 + Math.sin(state.elapsed * 2.2) * 0.35);
+    portalRing.rotation.z += delta * 0.16;
+    gateCrown.rotation.y += delta * 0.42;
+
+    if (materialize > 0.78 && car.position.z <= state.gateZ - 1.8) {
+      state.gateCrossed = true;
+      state.cameraTransition = 0;
+      state.endingTimer = 0;
+      state.shake = Math.max(state.shake, 0.24);
+      gateVeilMaterial.opacity = 0.72;
+      ui.flash.classList.add('on');
+      window.setTimeout(() => ui.flash.classList.remove('on'), 150);
+      audio.playTone(523.25, 2.4, 0.065);
+      audio.playTone(783.99, 3.1, 0.045);
+    }
+  } else {
+    state.cameraTransition = clamp(state.cameraTransition + delta / 1.25, 0, 1);
+    const distanceBehind = Math.max(0, state.gateZ - car.position.z);
+    const fade = smoothstep(24, 125, distanceBehind);
+    gateStoneMaterial.opacity = 1 - fade;
+    gateGlowMaterial.opacity = 1 - fade;
+    gateVeilMaterial.opacity = (0.22 + Math.sin(state.elapsed * 3.1) * 0.05) * (1 - fade);
+    gateLight.intensity = (2.8 + Math.sin(state.elapsed * 2.4) * 0.4) * (1 - fade);
+    portalRing.rotation.z += delta * 0.28;
+    if (fade >= 0.999) thresholdGate.visible = false;
+  }
+}
+
 const cameraPosition = new THREE.Vector3();
 const cameraTarget = new THREE.Vector3();
 const desiredCamera = new THREE.Vector3();
@@ -985,12 +1282,14 @@ const desiredTarget = new THREE.Vector3();
 const desiredCameraUp = new THREE.Vector3();
 
 function updateCamera(delta) {
-  const transition = smoothstep(0.08, 0.90, state.progress);
-  const chasePosition = new THREE.Vector3(car.position.x * 0.26, 4.5, car.position.z + 11.2);
+  const transition = smoothstep(0, 1, state.cameraTransition);
+  const visibilityProgress = smoothstep(0.02, 1, state.progress);
+  const chasePosition = new THREE.Vector3(car.position.x * 0.26, 4.65, car.position.z + 11.4);
   const overheadPosition = new THREE.Vector3(car.position.x * 0.12, 52, car.position.z + 4);
   desiredCamera.copy(chasePosition).lerp(overheadPosition, transition);
 
-  const chaseTarget = new THREE.Vector3(car.position.x * 0.72, 1.05, car.position.z - 14 - state.speed * 0.08);
+  const lookAhead = lerp(14, 28, visibilityProgress);
+  const chaseTarget = new THREE.Vector3(car.position.x * 0.72, lerp(1.05, 1.45, visibilityProgress), car.position.z - lookAhead - state.speed * 0.07);
   const overheadTarget = new THREE.Vector3(car.position.x * 0.18, 0, car.position.z - 4);
   desiredTarget.copy(chaseTarget).lerp(overheadTarget, transition);
 
@@ -1012,7 +1311,8 @@ function updateCamera(delta) {
   desiredCameraUp.set(0, lerp(1, 0.035, transition), lerp(0, -1, transition)).normalize();
   camera.up.lerp(desiredCameraUp, 1 - Math.exp(-delta * 2.8)).normalize();
   camera.lookAt(cameraTarget);
-  const targetFov = lerp(55 + state.speed * 0.095, 34, transition);
+  const chaseFov = 55 + state.speed * 0.095 + visibilityProgress * 3.5;
+  const targetFov = lerp(chaseFov, 34, transition);
   camera.fov = lerp(camera.fov, targetFov, 1 - Math.exp(-delta * 2.4));
   camera.updateProjectionMatrix();
 
@@ -1071,13 +1371,14 @@ function updateAtmosphere() {
   const skyColor = PALETTE.paper.clone().lerp(PALETTE.sky, atmosphericProgress);
   scene.background.copy(skyColor);
   scene.fog.color.copy(skyColor).lerp(PALETTE.fogWarm, atmosphericProgress * 0.12);
-  scene.fog.near = lerp(42, 58, atmosphericProgress);
-  scene.fog.far = lerp(165, 205, atmosphericProgress);
+  scene.fog.near = lerp(28, 88, atmosphericProgress);
+  scene.fog.far = lerp(105, 360, atmosphericProgress);
   hemiLight.intensity = lerp(2.25, 3.05, atmosphericProgress);
   sunLight.intensity = lerp(1.15, 2.8, atmosphericProgress);
   sunLight.color.copy(new THREE.Color('#ffffff')).lerp(new THREE.Color('#ffe2b8'), atmosphericProgress * 0.78);
   bloom.strength = lerp(0.18, 0.44, atmosphericProgress);
   bloom.threshold = lerp(0.84, 0.72, atmosphericProgress);
+  renderer.toneMappingExposure = lerp(1.04, 1.18, atmosphericProgress);
 }
 
 function updateInterface(delta) {
@@ -1099,9 +1400,9 @@ function updateInterface(delta) {
     if (state.seedNoticeTimer <= 0) ui.seedNotice.classList.remove('show');
   }
 
-  if (state.progress >= 0.999 && !state.ended) {
+  if (state.gateCrossed && state.cameraTransition >= 0.999 && !state.ended) {
     state.endingTimer += delta;
-    if (state.endingTimer > 3.5) {
+    if (state.endingTimer > 10.5) {
       state.ended = true;
       ui.ending.classList.add('visible');
       ui.hud.classList.remove('visible');
@@ -1124,6 +1425,7 @@ function frame() {
 
   if (state.started && !state.paused && !state.ended) {
     updatePlayer(delta);
+    updateThresholdGate(delta);
     updateCollectibles(delta);
     updateObstacles();
     updateWorldMaterials(delta);
@@ -1169,6 +1471,15 @@ if (import.meta.env.DEV) {
       state.distance = -car.position.z;
       ripples.push({ x: car.position.x, z: car.position.z, radius: 190, maxRadius: 260 });
       while (ripples.length > MAX_RIPPLES) ripples.shift();
+    },
+    crossGate() {
+      state.collected = 25;
+      state.progress = 1;
+      if (!state.gateSpawned) spawnThresholdGate();
+      state.gateReveal = 1;
+      thresholdGate.scale.setScalar(1);
+      car.position.z = state.gateZ - 2.2;
+      updateThresholdGate(0.016);
     },
   };
 }
