@@ -1055,8 +1055,12 @@ carShadow.position.y = 0.035;
 car.add(carShadow);
 
 const playerInkEdges = [];
+const playerInkMeshes = [];
 car.traverse((object) => {
   if (!object.isMesh || object === carShadow || object.material === glowMaterial) return;
+  playerInkMeshes.push(object);
+});
+playerInkMeshes.forEach((object) => {
   const inkMaterial = new THREE.LineBasicMaterial({
     color: '#000000',
     vertexColors: true,
